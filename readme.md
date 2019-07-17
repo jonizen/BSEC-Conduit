@@ -1,3 +1,6 @@
+# Fork of BSEC-Conduit Daemon
+Forked to make this work with Cayenne My devices service and publish data to MQTT and dashboard
+
 # BSEC-Conduit Daemon
 A first class Systemd process which acts as a conduit between between BSEC-Library
 and MQTT. Provides an alternative method of getting data out of an I2C connected
