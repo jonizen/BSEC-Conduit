@@ -1,6 +1,8 @@
 # Fork of BSEC-Conduit Daemon
 Forked to make this work with Cayenne My devices service and publish data to MQTT and dashboard
 
+Fixed so mqtt works with cayenne mqtt information.
+
 # BSEC-Conduit Daemon
 A first class Systemd process which acts as a conduit between between BSEC-Library
 and MQTT. Provides an alternative method of getting data out of an I2C connected
@@ -30,13 +32,13 @@ user `pi` on a recent Debian based distro (Raspbian/Hassbian). You can use any l
 and user you want, just make sure they are a member of the `i2c` group.
 - `sudo mkdir /opt/bsec` Create the directory.
 - `sudo chown pi:pi /opt/bsec` Change permissions on the directory.
-- `sudo -u pi git clone https://github.com/timothybrown/BSEC-Conduit.git /opt/bsec` Clone the repo into our new directory.
+- `sudo -u pi git clone https://github.com/jonizen/BSEC-Conduit.git /opt/bsec` Clone the repo into our new directory.
 - `sudo -u pi python3 -m venv /opt/bsec` Create our venv.
 - `cd /opt/bsec` Change into the directory.
 - `source bin/activate` Activate our new venv.
 - `sudo -u pi pip3 install systemd-python paho-mqtt` Install required Python modules.
 - `sudo python3 install.py` Run the installer.
-- `sudo -u pi nano bsec-conduit.ini` Edit the config section at the top of the file. Use `CTRL-X` to save.
+- `sudo -u pi nano bsec-conduit.ini` Edit the config section at the top of the file. Use `CTRL-X` to save.(Mqtt settings is not working, just cayennes set info in the bsec-conduit file.)
 - `sudo systemctl start bsec-conduit.service; journalctl -f -u bsec-conduit.service` Start the program and open the log file.
 
 ## Usage

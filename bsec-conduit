@@ -21,6 +21,7 @@ __date__ = '2018.11.16'
 __author__ = 'Timothy S. Brown'
 
 # Standard Modules
+import sys
 import os
 import signal
 import subprocess
@@ -37,7 +38,16 @@ import paho.mqtt.client as mqtt
 from systemd import journal
 from systemd import daemon
 from bseclib import BSECLibrary
+import cayenne.client
 
+# Cayenne authentication info. This should be obtained from the Cayenne Dashboard.
+MQTT_USERNAME  = "username"
+MQTT_PASSWORD  = "password"
+MQTT_CLIENT_ID = "client id"
+
+
+def on_message(message):
+    print("message received: " + str(message))
 
 ### Main Loop Function
 def main():
@@ -70,7 +80,12 @@ def main():
 
     # Set Initial Timestamp (if we're in debug mode.)
     if log_level == logging.DEBUG: timestamp = time.time()
-
+    
+    # Connect Cayenne/mydevices and kick it
+    client = cayenne.client.CayenneMQTTClient()
+    client.on_message = on_message
+    client.begin(MQTT_USERNAME, MQTT_PASSWORD, MQTT_CLIENT_ID)
+    
     # Open BSEC-Library Process and wait for it to connect to the sensor.
     bsec_lib.open()
 
@@ -80,6 +95,9 @@ def main():
     ## Start of Main Loop ##
     # Enter a (hopefully) infinite 'for loop' and iterate over BSEC-Library's output.
     for sample in bsec_lib.output():
+    
+       #start loop for Cayenne/mydevices
+        client.loop()
 
         # First step is to  determine if we need to ping the watchdog timer.
         if watchdog_enabled:
@@ -133,13 +151,14 @@ def main():
                 log.debug("IAQ Accuracy: {} | IAQ: {} | Temperature: {} | Humidity: {} | Pressure: {} | Gas: {}".format(
                 IAQ_Accuracy, IAQ, Temperature, Humidity, Pressure, Gas))
 
-            # Publish data to MQTT.
-            mqttc.publish('{}/iaq_accuracy'.format(mqtt_topic), payload=IAQ_Accuracy, retain=True)
-            mqttc.publish('{}/iaq'.format(mqtt_topic), payload=IAQ, retain=True)
-            mqttc.publish('{}/temperature'.format(mqtt_topic), payload=Temperature, retain=True)
-            mqttc.publish('{}/humidity'.format(mqtt_topic), payload=Humidity, retain=True)
-            mqttc.publish('{}/pressure'.format(mqtt_topic), payload=Pressure, retain=True)
-            mqttc.publish('{}/gas'.format(mqtt_topic), payload=Gas, retain=True)
+
+            #Publish data to Cayenne/mydevices
+            
+            client.celsiusWrite(1, Temperature)
+            client.hectoPascalWrite(2, Pressure)
+            client.virtualWrite(3, Humidity,"rel_hum","p")
+            client.virtualWrite(4, Gas, "co","ohms")
+            client.virtualWrite(5, IAQ, "IAQ","p")
 
     ## End of Main Loop ##
 
@@ -147,74 +166,6 @@ def main():
     log.error("BSEC-Library encountered an unhandled exception. Terminating.")
     return(0)
 
-### MQTT Functions
-## Defines "Home Assistant Discovery" publisher function.
-def mqtt_discovery(client):
-    mqttc = client
-
-    if log_level == logging.DEBUG:
-        log.debug('Publishing MQTT Discovery Topics: {}/sensor/{}/bme680_*/config'.format(discovery_prefix, mqtt_client_id))
-
-    # Topic names.
-    config_topics = ['iaq_accuracy', 'iaq', 'temperature', 'humidity', 'pressure', 'gas']
-    # Config payloads.
-    config_payloads = [json.dumps({
-    'name': 'BME680 IAQ Accuracy',
-    'state_topic': '{}/iaq_accuracy'.format(mqtt_topic),
-    'availability_topic': '{}/status'.format(mqtt_topic),
-    'icon': 'mdi:blur-linear'
-    }),
-    json.dumps({
-    'name': 'BME680 IAQ',
-    'state_topic': '{}/iaq'.format(mqtt_topic),
-    'availability_topic': '{}/status'.format(mqtt_topic),
-    'unit_of_measurement': '{unit}'.format(unit = '%' if general_iaq_as_percent else 'IAQ'),
-    'icon': 'mdi:blur'
-    }),
-    json.dumps({
-    'device_class': 'temperature',
-    'name': 'BME680 Temperature',
-    'state_topic': '{}/temperature'.format(mqtt_topic),
-    'availability_topic': '{}/status'.format(mqtt_topic),
-    'unit_of_measurement': '{unit}'.format(unit = '°F' if general_convert_to_f else '°C'),
-    'icon': 'mdi:thermometer'
-    }),
-    json.dumps({
-    'device_class': 'humidity',
-    'name': 'BME680 Humidity',
-    'state_topic': '{}/humidity'.format(mqtt_topic),
-    'availability_topic': '{}/status'.format(mqtt_topic),
-    'unit_of_measurement': '%',
-    'icon': 'mdi:water-percent'
-    }),
-    json.dumps({
-    'device_class': 'pressure',
-    'name': 'BME680 Pressure',
-    'state_topic': '{}/pressure'.format(mqtt_topic),
-    'availability_topic': '{}/status'.format(mqtt_topic),
-    'unit_of_measurement': 'hPa',
-    'icon': 'mdi:gauge'
-    }),
-    json.dumps({
-    'name': 'BME680 Gas Resistance',
-    'state_topic': '{}/gas'.format(mqtt_topic),
-    'availability_topic': '{}/status'.format(mqtt_topic),
-    'unit_of_measurement': 'Ω',
-    'icon': 'mdi:gas-cylinder'
-    })]
-    # Publish discovery config topics.
-    for topic, payload in zip(config_topics, config_payloads):
-        mqttc.publish('{}/sensor/{}/{}/config'.format(discovery_prefix, mqtt_client_id, topic), payload=payload, retain=True)
-
-## Defines "MQTT on_connect" callback.
-def mqtt_on_connect(client, userdata, flags, rc):
-    log.info("Connected to MQTT Broker.")
-    client.publish('{}/status'.format(mqtt_topic), payload='online', retain=True)
-    if discovery_enabled: mqtt_discovery(client)
-
-## Defines "MQTT on_disconnect" callback.
-def mqtt_on_disconnect(client, userdata, rc):
-    log.info("Disconnected from MQTT Broker.")
 
 ### System Functions
 ## Defines Exit Handler callback.
