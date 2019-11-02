@@ -1,5 +1,5 @@
 # Fork of BSEC-Conduit Daemon
-Forked to make this work with Cayenne My devices service and publish data to MQTT and dashboard
+Forked to make this work with latest version from Bosch
 
 Fixed so mqtt works with cayenne mqtt information.
 
