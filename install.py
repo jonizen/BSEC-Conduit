@@ -305,6 +305,6 @@ and reboot.
 
 If you run into problems please report them by opening a new issue on GitHub.
 
-https://github.com/timothybrown/BSEC-Conduit
+https://github.com/jonizen/BSEC-Conduit or here https://github.com/timothybrown/BSEC-Conduit
 """.format(install_dir))
 print("****************************************************************************")
