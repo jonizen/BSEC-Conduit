@@ -178,15 +178,15 @@ class BSECLibrary:
                 # If we are, test to see if we're on a ARMv8 machine.
                 if rpi_processor is 'BCM2837':
                     self.log.info('Detected architecture as ARMv8 64-Bit.')
-                    return 'Normal_version/RaspberryPI/PiThree_ArmV8-a-64bits'
+                    return 'normal_version/bin/RaspberryPI/PiThree_ArmV8-a-64bits'
                 # Then test for ARMv7.
                 elif rpi_processor is 'BCM2836':
                     self.log.info('Detected architecture as ARMv7 32-Bit.')
-                    return 'Normal_version/RaspberryPI/PiZero_ArmV6-32bits'
+                    return 'normal_version/bin/RaspberryPI/PiZero_ArmV6-32bits'
                 # Finally test for ARMv6.
                 elif rpi_processor is 'BCM2835':
                     self.log.info('Detected architecture as ARMv6 32-Bit.')
-                    return 'Normal_version/RaspberryPI/PiZero_ArmV6-32bits'
+                    return 'normal_version/bin/RaspberryPI/PiZero_ArmV6-32bits'
             # Well, I guess we're not on a Pi... Let's take a stab at it anyway!
             # Note: The underlying `RaspberryPI/Pi*` libraries will work on non-Pi
             # systems, as long as it's an ARM processor running Linux.
@@ -194,11 +194,11 @@ class BSECLibrary:
                 # Test for ARMv8.
                 if 'armv8' in machine:
                     self.log.info('Detected architecture as ARMv8 64-Bit.')
-                    return 'Normal_version/RaspberryPI/PiThree_ArmV8-a-64bits'
+                    return 'normal_version/bin/RaspberryPI/PiThree_ArmV8-a-64bits'
                 # Then we must be on a 32-Bit platform.
                 else:
                     self.log.info('Detected architecture as ARM{} 32-Bit.'.format(machine[3:]))
-                    return 'Normal_version/RaspberryPI/PiZero_ArmV6-32bits'
+                    return 'normal_version/bin/RaspberryPI/PiZero_ArmV6-32bits'
             # Catch all in case something went wrong.
             self.log.error("Encountered an unknown error trying to determine system architecture.")
             raise BSECLibraryError()
@@ -234,12 +234,12 @@ class BSECLibrary:
                             '-Wno-unused-variable',
                             '-static',
                             '-iquote{}/API'.format(src_dir),
-                            '-iquote{}/algo/bin/{}'.format(src_dir, lib_arch),
+                            '-iquote{}/algo/{}'.format(src_dir, lib_arch),
                             '-iquote{}/examples'.format(src_dir),
                             '{}/API/bme680.c'.format(src_dir),
                             '{}/examples/bsec_integration.c'.format(src_dir),
                             '{}/bsec-library.c'.format(src_dir),
-                            '-L{}/algo/bin/{}'.format(src_dir, lib_arch),
+                            '-L{}/algo/{}'.format(src_dir, lib_arch),
                             '-lalgobsec',
                             '-lm',
                             '-lrt',
@@ -254,6 +254,7 @@ class BSECLibrary:
                 build_error = build_process.stdout.decode()
                 self.log.error('Encountered an error during the build process!')
                 self.log.error(build_error)
+                self.log(build_process)
                 raise BSECLibraryError()
             else:
                 self.log.info("Build process complete.")
@@ -312,33 +313,15 @@ class BSECLibrary:
 bsec_library_c = """/* Copyright (C) 2017 alexh.name */
 /* I2C code by twartzek 2017 */
 /* argv[] code by TimothyBrown 2018 */
-/**
-  *  MIT License
-  *
-  *    Permission is hereby granted, free of charge, to any person obtaining a copy
-  *    of this software and associated documentation files (the "Software"), to deal
-  *    in the Software without restriction, including without limitation the rights
-  *    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-  *    copies of the Software, and to permit persons to whom the Software is
-  *    furnished to do so, subject to the following conditions:
-  *
-  *    The above copyright notice and this permission notice shall be included in all
-  *    copies or substantial portions of the Software.
-  *
-  *    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-  *    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-  *    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-  *    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-  *    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-  *    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-  *    SOFTWARE.
-  */
 
 /*
  * Read the BME680 sensor with the BSEC library by running an endless loop in
  * the bsec_iot_loop() function under Linux.
  *
  */
+
+/*#define _POSIX_C_SOURCE 200809L*/
+#define _XOPEN_SOURCE 700
 
 /* header files */
 
@@ -353,17 +336,18 @@ bsec_library_c = """/* Copyright (C) 2017 alexh.name */
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <linux/i2c-dev.h>
-#include "bsec_datatypes.h"
 #include "bsec_integration.h"
-#include "bme680.h"
 
 /* definitions */
+
+#define DESTZONE "TZ=Europe/Berlin"
+#define temp_offset (5.0f)
+#define sample_rate_mode (BSEC_SAMPLE_RATE_LP)
+
 int g_i2cFid; // I2C Linux device handle
-int i2c_address; // Changed from #define to argv[1].
-float temp_offset; // Changed from #define to argv[2].
-float sample_rate_mode; // Changed from #define to argv[3].
-char *filename_state = "bsec-library.state";
-char *filename_config = "bsec-library.config";
+int i2c_address = BME680_I2C_ADDR_PRIMARY;
+char *filename_state = "bsec_iaq.state";
+char *filename_config = "bsec_iaq.config";
 
 /* functions */
 
@@ -409,8 +393,9 @@ int8_t bus_write(uint8_t dev_addr, uint8_t reg_addr, uint8_t *reg_data_ptr,
 
   uint8_t reg[16];
   reg[0]=reg_addr;
+  int i;
 
-  for (int i=1; i<data_len+1; i++)
+  for (i=1; i<data_len+1; i++)
     reg[i] = reg_data_ptr[i-1];
 
   if (write(g_i2cFid, reg, data_len+1) != data_len+1) {
@@ -502,6 +487,9 @@ int64_t get_timestamp_us()
  * param[in]       raw_humidity    raw humidity signal
  * param[in]       gas             raw gas sensor signal
  * param[in]       bsec_status     value returned by the bsec_do_steps() call
+ * param[in]       static_iaq      unscaled indoor-air-quality estimate
+ * param[in]       co2_equivalent  CO2 equivalent estimate [ppm]
+ * param[in]       breath_voc_equivalent  breath VOC concentration estimate [ppm]
  *
  * return          none
  */
@@ -523,14 +511,19 @@ void output_ready(int64_t timestamp, float iaq, uint8_t iaq_accuracy,
   time_t t = time(NULL);
   struct tm tm = *localtime(&t);
 
-  printf("{\\"IAQ_Accuracy\\": \\"%d\\"", iaq_accuracy);
-  printf(", \\"IAQ\\": \\"%.2f\\"", iaq);
-  printf(", \\"Temperature\\": \\"%.2f\\"", temperature);
-  printf(", \\"Humidity\\": \\"%.2f\\"", humidity);
-  printf(", \\"Pressure\\": \\"%.2f\\"", pressure / 100);
-  printf(", \\"Gas\\": \\"%.0f\\"", gas);
-  printf(", \\"Status\\": \\"%d\\"}", bsec_status);
-  printf("\\r\\n");
+  printf("%d-%02d-%02d %02d:%02d:%02d,", tm.tm_year + 1900,tm.tm_mon + 1,
+         tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec); /* localtime */
+  printf("[IAQ (%d)]: %.2f", iaq_accuracy, iaq);
+  printf(",[T degC]: %.2f,[H %%rH]: %.2f,[P hPa]: %.2f", temperature,
+         humidity,pressure / 100);
+  printf(",[G Ohms]: %.0f", gas);
+  printf(",[S]: %d", bsec_status);
+  //printf(",[static IAQ]: %.2f", static_iaq);
+  printf(",[eCO2 ppm]: %.15f", co2_equivalent);
+  printf(",[bVOCe ppm]: %.25f", breath_voc_equivalent);
+  //printf(",%" PRId64, timestamp);
+  //printf(",%" PRId64, timestamp_ms);
+  printf("\r\n");
   fflush(stdout);
 }
 
@@ -561,7 +554,7 @@ uint32_t binary_load(uint8_t *b_buffer, uint32_t n_buffer, char *filename,
   uint32_t filesize = fileinfo.st_size - offset;
 
   if (filesize > n_buffer) {
-    fprintf(stderr,"%s: %d > %d\\n", "binary data bigger than buffer", filesize,
+    fprintf(stderr,"%s: %d > %d\n", "binary data bigger than buffer", filesize,
             n_buffer);
     return 0;
   } else {
@@ -574,7 +567,7 @@ uint32_t binary_load(uint8_t *b_buffer, uint32_t n_buffer, char *filename,
     fseek(file_ptr,offset,SEEK_SET);
     copied_bytes = fread(b_buffer,sizeof(char),filesize,file_ptr);
     if (copied_bytes == 0) {
-      fprintf(stderr,"%s empty\\n",filename);
+      fprintf(stderr,"%s empty\n",filename);
     }
     fclose(file_ptr);
     return copied_bytes;
@@ -640,44 +633,9 @@ uint32_t config_load(uint8_t *config_buffer, uint32_t n_buffer)
  *
  * return      result of the processing
  */
-int main(int argc, char *argv[])
+int main()
 {
-  //putenv(DESTZONE); // Now taken care of in the Python controller.
-  if (argc == 4)
-    {
-      i2c_address = atoi (argv[1]);
-      if (i2c_address < 118 || i2c_address > 119)
-        {
-          printf("Error: '%s' is not a valid address for argument <i2c_address>.\\nValid Options: 118|119\\n", argv[1]);
-          return 1;
-        }
-      temp_offset = strtof (argv[2], NULL);
-      if (temp_offset > 10.0 || temp_offset < -10.0)
-        {
-          printf("Error: '%f' is outside of the valid range for argument <temperature_offset>.\\nValid Range: 10.0 to -10.0\\n", temp_offset);
-          return 1;
-        }
-      if (strcmp(argv[3], "LP") == 0)
-        {
-          sample_rate_mode = BSEC_SAMPLE_RATE_LP;
-        }
-      else if (strcmp(argv[3], "ULP") == 0)
-        {
-          sample_rate_mode = BSEC_SAMPLE_RATE_ULP;
-        }
-      else
-        {
-          printf("Error: '%s' isn't a valid option for argument <sample_rate_mode>.\\nValid Options: LP|ULP\\n", argv[3]);
-          return 1;
-        }
-    }
-  else
-    {
-      printf("Usage:\\n");
-      printf("  %s <i2c_address> <temp_offset> <sample_rate_mode>\\n", argv[0]);
-      printf("       i2c_address: 118|119\\n       temp_offset: 10.0 to -10.0\\n  sample_rate_mode: LP|ULP\\n");
-      return 1;
-    }
+  putenv(DESTZONE); // Switch to destination time zone
 
   i2cOpen();
   i2cSetAddress(i2c_address);
@@ -705,6 +663,7 @@ int main(int argc, char *argv[])
   i2cClose();
   return 0;
 }
+
 """
 if __name__ == "__main__":
     logging.critical("This module cannot not run standalone.")
