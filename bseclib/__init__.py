@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 """
 # BSECLibrary - (C) 2018 TimothyBrown
-
 Uses the Bosch BSEC sensor fusion library to communicate with a BME680.
-
-
-
 MIT License
 """
 __program__ = 'BSECLibrary'
@@ -113,6 +109,7 @@ class BSECLibrary:
                 tz = int((time.timezone if (time.localtime().tm_isdst == 0) else time.altzone) / 60 / 60 * -1)
                 new_env['TZ'] = 'Etc/GMT{}'.format(tz)
             run_command = [self.exec_path, str(self.i2c_address), str(self.temp_offset), self.sample_rate_string]
+            self.log.warning(run_command)
             self.proc = subprocess.Popen(run_command, stdout=subprocess.PIPE, env=new_env)
             if self.proc.returncode is not None:
                 self.log.error('BSEC-Library encountered an error ({}) during startup.'.format(self.proc.returncode))
@@ -228,24 +225,24 @@ class BSECLibrary:
             lib_arch = arch()
             # Generate the build command.
             build_command = [
-                            'cc',
-                            '-Wall',
-                            '-Wno-unused-but-set-variable',
-                            '-Wno-unused-variable',
-                            '-static',
-                            '-iquote{}/API'.format(src_dir),
-                            '-iquote{}/algo/{}'.format(src_dir, lib_arch),
-                            '-iquote{}/examples'.format(src_dir),
-                            '{}/API/bme680.c'.format(src_dir),
-                            '{}/examples/bsec_integration.c'.format(src_dir),
-                            '{}/bsec-library.c'.format(src_dir),
-                            '-L{}/algo/{}'.format(src_dir, lib_arch),
-                            '-lalgobsec',
-                            '-lm',
-                            '-lrt',
-                            '-o',
-                            exec_dst
-                            ]
+                'cc',
+                '-Wall',
+                '-Wno-unused-but-set-variable',
+                '-Wno-unused-variable',
+                '-static',
+                '-iquote{}/API'.format(src_dir),
+                '-iquote{}/algo/{}'.format(src_dir, lib_arch),
+                '-iquote{}/examples'.format(src_dir),
+                '{}/API/bme680.c'.format(src_dir),
+                '{}/examples/bsec_integration.c'.format(src_dir),
+                '{}/bsec-library.c'.format(src_dir),
+                '-L{}/algo/{}'.format(src_dir, lib_arch),
+                '-lalgobsec',
+                '-lm',
+                '-lrt',
+                '-o',
+                exec_dst
+            ]
             # Run the build process.
             build_process = subprocess.run(build_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
@@ -254,7 +251,6 @@ class BSECLibrary:
                 build_error = build_process.stdout.decode()
                 self.log.error('Encountered an error during the build process!')
                 self.log.error(build_error)
-                self.log(build_process)
                 raise BSECLibraryError()
             else:
                 self.log.info("Build process complete.")
@@ -280,7 +276,7 @@ class BSECLibrary:
             '16851fcb6becb9b814263deb3d31623b': {'string': 'generic_33v_300s_4d', 'voltage': 3.3, 'sample rate': 300, 'retain state': 4},
             'a401d7712179350a7b6ff6fc035d49c2': {'string': 'generic_33v_3s_28d', 'voltage': 3.3, 'sample rate': 3, 'retain state': 28},
             '1107f7ce9fcb414de64e899babc1a1ee': {'string': 'generic_33v_3s_4d', 'voltage': 3.3, 'sample rate': 3, 'retain state': 4}
-            }
+        }
         try:
             with open(config_dst, 'rb') as f:
                 hash = md5(f.read()).hexdigest().lower()
@@ -313,18 +309,33 @@ class BSECLibrary:
 bsec_library_c = """/* Copyright (C) 2017 alexh.name */
 /* I2C code by twartzek 2017 */
 /* argv[] code by TimothyBrown 2018 */
-
+/**
+  *  MIT License
+  *
+  *    Permission is hereby granted, free of charge, to any person obtaining a copy
+  *    of this software and associated documentation files (the "Software"), to deal
+  *    in the Software without restriction, including without limitation the rights
+  *    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  *    copies of the Software, and to permit persons to whom the Software is
+  *    furnished to do so, subject to the following conditions:
+  *
+  *    The above copyright notice and this permission notice shall be included in all
+  *    copies or substantial portions of the Software.
+  *
+  *    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  *    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  *    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  *    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  *    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  *    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  *    SOFTWARE.
+  */
 /*
  * Read the BME680 sensor with the BSEC library by running an endless loop in
  * the bsec_iot_loop() function under Linux.
  *
  */
-
-/*#define _POSIX_C_SOURCE 200809L*/
-#define _XOPEN_SOURCE 700
-
 /* header files */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -336,21 +347,17 @@ bsec_library_c = """/* Copyright (C) 2017 alexh.name */
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <linux/i2c-dev.h>
+#include "bsec_datatypes.h"
 #include "bsec_integration.h"
-
+#include "bme680.h"
 /* definitions */
-
-#define DESTZONE "TZ=Europe/Berlin"
-#define temp_offset (5.0f)
-#define sample_rate_mode (BSEC_SAMPLE_RATE_LP)
-
 int g_i2cFid; // I2C Linux device handle
-int i2c_address = BME680_I2C_ADDR_PRIMARY;
-char *filename_state = "bsec_iaq.state";
-char *filename_config = "bsec_iaq.config";
-
+int i2c_address; // Changed from #define to argv[1].
+float temp_offset; // Changed from #define to argv[2].
+float sample_rate_mode; // Changed from #define to argv[3].
+char *filename_state = "bsec-library.state";
+char *filename_config = "bsec-library.config";
 /* functions */
-
 // open the Linux device
 void i2cOpen()
 {
@@ -360,13 +367,11 @@ void i2cOpen()
     exit(1);
   }
 }
-
 // close the Linux device
 void i2cClose()
 {
   close(g_i2cFid);
 }
-
 // set the I2C slave address for all subsequent I2C device transfers
 void i2cSetAddress(int address)
 {
@@ -375,7 +380,6 @@ void i2cSetAddress(int address)
     exit(1);
   }
 }
-
 /*
  * Write operation in either I2C or SPI
  *
@@ -390,23 +394,17 @@ int8_t bus_write(uint8_t dev_addr, uint8_t reg_addr, uint8_t *reg_data_ptr,
                  uint16_t data_len)
 {
   int8_t rslt = 0; /* Return 0 for Success, non-zero for failure */
-
   uint8_t reg[16];
   reg[0]=reg_addr;
-  int i;
-
-  for (i=1; i<data_len+1; i++)
+  for (int i=1; i<data_len+1; i++)
     reg[i] = reg_data_ptr[i-1];
-
   if (write(g_i2cFid, reg, data_len+1) != data_len+1) {
     perror("user_i2c_write");
     rslt = 1;
     exit(1);
   }
-
   return rslt;
 }
-
 /*
  * Read operation in either I2C or SPI
  *
@@ -422,23 +420,18 @@ int8_t bus_read(uint8_t dev_addr, uint8_t reg_addr, uint8_t *reg_data_ptr,
                 uint16_t data_len)
 {
   int8_t rslt = 0; /* Return 0 for Success, non-zero for failure */
-
   uint8_t reg[1];
   reg[0]=reg_addr;
-
   if (write(g_i2cFid, reg, 1) != 1) {
     perror("user_i2c_read_reg");
     rslt = 1;
   }
-
   if (read(g_i2cFid, reg_data_ptr, data_len) != data_len) {
     perror("user_i2c_read_data");
     rslt = 1;
   }
-
   return rslt;
 }
-
 /*
  * System specific implementation of sleep function
  *
@@ -454,7 +447,6 @@ void _sleep(uint32_t t_ms)
   ts.tv_nsec = (t_ms % 1000) * 1000000L;
   nanosleep(&ts, NULL);
 }
-
 /*
  * Capture the system time in microseconds
  *
@@ -466,14 +458,11 @@ int64_t get_timestamp_us()
   //clock_gettime(CLOCK_REALTIME, &spec);
   /* MONOTONIC in favor of REALTIME to avoid interference by time sync. */
   clock_gettime(CLOCK_MONOTONIC, &spec);
-
   int64_t system_current_time_ns = (int64_t)(spec.tv_sec) * (int64_t)1000000000
                                    + (int64_t)(spec.tv_nsec);
   int64_t system_current_time_us = system_current_time_ns / 1000;
-
   return system_current_time_us;
 }
-
 /*
  * Handling of the ready outputs
  *
@@ -487,9 +476,6 @@ int64_t get_timestamp_us()
  * param[in]       raw_humidity    raw humidity signal
  * param[in]       gas             raw gas sensor signal
  * param[in]       bsec_status     value returned by the bsec_do_steps() call
- * param[in]       static_iaq      unscaled indoor-air-quality estimate
- * param[in]       co2_equivalent  CO2 equivalent estimate [ppm]
- * param[in]       breath_voc_equivalent  breath VOC concentration estimate [ppm]
  *
  * return          none
  */
@@ -502,7 +488,6 @@ void output_ready(int64_t timestamp, float iaq, uint8_t iaq_accuracy,
 {
   //int64_t timestamp_s = timestamp / 1000000000;
   ////int64_t timestamp_ms = timestamp / 1000;
-
   //time_t t = timestamp_s;
   /*
    * timestamp for localtime only makes sense if get_timestamp_us() uses
@@ -510,23 +495,16 @@ void output_ready(int64_t timestamp, float iaq, uint8_t iaq_accuracy,
    */
   time_t t = time(NULL);
   struct tm tm = *localtime(&t);
-
-  printf("%d-%02d-%02d %02d:%02d:%02d,", tm.tm_year + 1900,tm.tm_mon + 1,
-         tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec); /* localtime */
-  printf("[IAQ (%d)]: %.2f", iaq_accuracy, iaq);
-  printf(",[T degC]: %.2f,[H %%rH]: %.2f,[P hPa]: %.2f", temperature,
-         humidity,pressure / 100);
-  printf(",[G Ohms]: %.0f", gas);
-  printf(",[S]: %d", bsec_status);
-  //printf(",[static IAQ]: %.2f", static_iaq);
-  printf(",[eCO2 ppm]: %.15f", co2_equivalent);
-  printf(",[bVOCe ppm]: %.25f", breath_voc_equivalent);
-  //printf(",%" PRId64, timestamp);
-  //printf(",%" PRId64, timestamp_ms);
-  printf("\r\n");
+  printf("{\\"IAQ_Accuracy\\": \\"%d\\"", iaq_accuracy);
+  printf(", \\"IAQ\\": \\"%.2f\\"", iaq);
+  printf(", \\"Temperature\\": \\"%.2f\\"", temperature);
+  printf(", \\"Humidity\\": \\"%.2f\\"", humidity);
+  printf(", \\"Pressure\\": \\"%.2f\\"", pressure / 100);
+  printf(", \\"Gas\\": \\"%.0f\\"", gas);
+  printf(", \\"Status\\": \\"%d\\"}", bsec_status);
+  printf("\\r\\n");
   fflush(stdout);
 }
-
 /*
  * Load binary file from non-volatile memory into buffer
  *
@@ -542,7 +520,6 @@ uint32_t binary_load(uint8_t *b_buffer, uint32_t n_buffer, char *filename,
 {
   int32_t copied_bytes = 0;
   int8_t rslt = 0;
-
   struct stat fileinfo;
   rslt = stat(filename, &fileinfo);
   if (rslt != 0) {
@@ -550,11 +527,9 @@ uint32_t binary_load(uint8_t *b_buffer, uint32_t n_buffer, char *filename,
     perror("");
     return 0;
   }
-
   uint32_t filesize = fileinfo.st_size - offset;
-
   if (filesize > n_buffer) {
-    fprintf(stderr,"%s: %d > %d\n", "binary data bigger than buffer", filesize,
+    fprintf(stderr,"%s: %d > %d\\n", "binary data bigger than buffer", filesize,
             n_buffer);
     return 0;
   } else {
@@ -567,13 +542,12 @@ uint32_t binary_load(uint8_t *b_buffer, uint32_t n_buffer, char *filename,
     fseek(file_ptr,offset,SEEK_SET);
     copied_bytes = fread(b_buffer,sizeof(char),filesize,file_ptr);
     if (copied_bytes == 0) {
-      fprintf(stderr,"%s empty\n",filename);
+      fprintf(stderr,"%s empty\\n",filename);
     }
     fclose(file_ptr);
     return copied_bytes;
   }
 }
-
 /*
  * Load previous library state from non-volatile memory
  *
@@ -588,7 +562,6 @@ uint32_t state_load(uint8_t *state_buffer, uint32_t n_buffer)
   rslt = binary_load(state_buffer, n_buffer, filename_state, 0);
   return rslt;
 }
-
 /*
  * Save library state to non-volatile memory
  *
@@ -604,7 +577,6 @@ void state_save(const uint8_t *state_buffer, uint32_t length)
   fwrite(state_buffer,length,1,state_w_ptr);
   fclose(state_w_ptr);
 }
-
 /*
  * Load library config from non-volatile memory
  *
@@ -624,24 +596,54 @@ uint32_t config_load(uint8_t *config_buffer, uint32_t n_buffer)
   rslt = binary_load(config_buffer, n_buffer, filename_config, 4);
   return rslt;
 }
-
 /* main */
-
 /*
  * Main function which configures BSEC library and then reads and processes
  * the data from sensor based on timer ticks
  *
  * return      result of the processing
  */
-int main()
+int main(int argc, char *argv[])
 {
-  putenv(DESTZONE); // Switch to destination time zone
-
+  //putenv(DESTZONE); // Now taken care of in the Python controller.
+  if (argc == 4)
+    {
+      i2c_address = atoi (argv[1]);
+      if (i2c_address < 118 || i2c_address > 119)
+        {
+          printf("Error: '%s' is not a valid address for argument <i2c_address>.\\nValid Options: 118|119\\n", argv[1]);
+          return 1;
+        }
+      temp_offset = strtof (argv[2], NULL);
+      if (temp_offset > 10.0 || temp_offset < -10.0)
+        {
+          printf("Error: '%f' is outside of the valid range for argument <temperature_offset>.\\nValid Range: 10.0 to -10.0\\n", temp_offset);
+          return 1;
+        }
+      if (strcmp(argv[3], "LP") == 0)
+        {
+          sample_rate_mode = BSEC_SAMPLE_RATE_LP;
+        }
+      else if (strcmp(argv[3], "ULP") == 0)
+        {
+          sample_rate_mode = BSEC_SAMPLE_RATE_ULP;
+        }
+      else
+        {
+          printf("Error: '%s' isn't a valid option for argument <sample_rate_mode>.\\nValid Options: LP|ULP\\n", argv[3]);
+          return 1;
+        }
+    }
+  else
+    {
+      printf("Usage:\\n");
+      printf("  %s <i2c_address> <temp_offset> <sample_rate_mode>\\n", argv[0]);
+      printf("       i2c_address: 118|119\\n       temp_offset: 10.0 to -10.0\\n  sample_rate_mode: LP|ULP\\n");
+      return 1;
+    }
   i2cOpen();
   i2cSetAddress(i2c_address);
-
   return_values_init ret;
-
   ret = bsec_iot_init(sample_rate_mode, temp_offset, bus_write, bus_read,
                       _sleep, state_load, config_load);
   if (ret.bme680_status) {
@@ -651,7 +653,6 @@ int main()
     /* Could not intialize BSEC library */
     return (int)ret.bsec_status;
   }
-
   /* Call to endless loop function which reads and processes data based on
    * sensor settings.
    * State is saved every 10.000 samples, which means every 10.000 * 3 secs
@@ -659,11 +660,9 @@ int main()
    *
    */
   bsec_iot_loop(_sleep, get_timestamp_us, output_ready, state_save, 10000);
-
   i2cClose();
   return 0;
 }
-
 """
 if __name__ == "__main__":
     logging.critical("This module cannot not run standalone.")

@@ -131,7 +131,7 @@ def main():
             if log_level == logging.DEBUG:
                 log.debug("Read {} samples over {} seconds from BSEC-Library.".format(num_samples, cache_update_rate))
                 log.debug("IAQ Accuracy: {} | IAQ: {} | Temperature: {} | Humidity: {} | Pressure: {} | Gas: {}".format(
-                IAQ_Accuracy, IAQ, Temperature, Humidity, Pressure, Gas))
+                    IAQ_Accuracy, IAQ, Temperature, Humidity, Pressure, Gas))
 
             # Publish data to MQTT.
             mqttc.publish('{}/iaq_accuracy'.format(mqtt_topic), payload=IAQ_Accuracy, retain=True)
@@ -159,49 +159,49 @@ def mqtt_discovery(client):
     config_topics = ['iaq_accuracy', 'iaq', 'temperature', 'humidity', 'pressure', 'gas']
     # Config payloads.
     config_payloads = [json.dumps({
-    'name': 'BME680 IAQ Accuracy',
-    'state_topic': '{}/iaq_accuracy'.format(mqtt_topic),
-    'availability_topic': '{}/status'.format(mqtt_topic),
-    'icon': 'mdi:blur-linear'
+        'name': 'BME680 IAQ Accuracy',
+        'state_topic': '{}/iaq_accuracy'.format(mqtt_topic),
+        'availability_topic': '{}/status'.format(mqtt_topic),
+        'icon': 'mdi:blur-linear'
     }),
-    json.dumps({
-    'name': 'BME680 IAQ',
-    'state_topic': '{}/iaq'.format(mqtt_topic),
-    'availability_topic': '{}/status'.format(mqtt_topic),
-    'unit_of_measurement': '{unit}'.format(unit = '%' if general_iaq_as_percent else 'IAQ'),
-    'icon': 'mdi:blur'
-    }),
-    json.dumps({
-    'device_class': 'temperature',
-    'name': 'BME680 Temperature',
-    'state_topic': '{}/temperature'.format(mqtt_topic),
-    'availability_topic': '{}/status'.format(mqtt_topic),
-    'unit_of_measurement': '{unit}'.format(unit = '°F' if general_convert_to_f else '°C'),
-    'icon': 'mdi:thermometer'
-    }),
-    json.dumps({
-    'device_class': 'humidity',
-    'name': 'BME680 Humidity',
-    'state_topic': '{}/humidity'.format(mqtt_topic),
-    'availability_topic': '{}/status'.format(mqtt_topic),
-    'unit_of_measurement': '%',
-    'icon': 'mdi:water-percent'
-    }),
-    json.dumps({
-    'device_class': 'pressure',
-    'name': 'BME680 Pressure',
-    'state_topic': '{}/pressure'.format(mqtt_topic),
-    'availability_topic': '{}/status'.format(mqtt_topic),
-    'unit_of_measurement': 'hPa',
-    'icon': 'mdi:gauge'
-    }),
-    json.dumps({
-    'name': 'BME680 Gas Resistance',
-    'state_topic': '{}/gas'.format(mqtt_topic),
-    'availability_topic': '{}/status'.format(mqtt_topic),
-    'unit_of_measurement': 'Ω',
-    'icon': 'mdi:gas-cylinder'
-    })]
+        json.dumps({
+            'name': 'BME680 IAQ',
+            'state_topic': '{}/iaq'.format(mqtt_topic),
+            'availability_topic': '{}/status'.format(mqtt_topic),
+            'unit_of_measurement': '{unit}'.format(unit = '%' if general_iaq_as_percent else 'IAQ'),
+            'icon': 'mdi:blur'
+        }),
+        json.dumps({
+            'device_class': 'temperature',
+            'name': 'BME680 Temperature',
+            'state_topic': '{}/temperature'.format(mqtt_topic),
+            'availability_topic': '{}/status'.format(mqtt_topic),
+            'unit_of_measurement': '{unit}'.format(unit = '°F' if general_convert_to_f else '°C'),
+            'icon': 'mdi:thermometer'
+        }),
+        json.dumps({
+            'device_class': 'humidity',
+            'name': 'BME680 Humidity',
+            'state_topic': '{}/humidity'.format(mqtt_topic),
+            'availability_topic': '{}/status'.format(mqtt_topic),
+            'unit_of_measurement': '%',
+            'icon': 'mdi:water-percent'
+        }),
+        json.dumps({
+            'device_class': 'pressure',
+            'name': 'BME680 Pressure',
+            'state_topic': '{}/pressure'.format(mqtt_topic),
+            'availability_topic': '{}/status'.format(mqtt_topic),
+            'unit_of_measurement': 'hPa',
+            'icon': 'mdi:gauge'
+        }),
+        json.dumps({
+            'name': 'BME680 Gas Resistance',
+            'state_topic': '{}/gas'.format(mqtt_topic),
+            'availability_topic': '{}/status'.format(mqtt_topic),
+            'unit_of_measurement': 'Ω',
+            'icon': 'mdi:gas-cylinder'
+        })]
     # Publish discovery config topics.
     for topic, payload in zip(config_topics, config_payloads):
         mqttc.publish('{}/sensor/{}/{}/config'.format(discovery_prefix, mqtt_client_id, topic), payload=payload, retain=True)
@@ -363,6 +363,12 @@ if __name__ == "__main__":
         else:
             mqtt_client_id = None
 
+
+    # MQTT CA Certificate
+    mqtt_certificate = config['MQTT']['certificate']
+    if mqtt_certificate == '':
+        mqtt_certificate = None
+
     # MQTT Broker IP or Host
     mqtt_host = config['MQTT'].get('host', '127.0.0.1')
 
@@ -426,6 +432,10 @@ if __name__ == "__main__":
     ## MQTT Setup
     # MQTT Client Object.
     mqttc = mqtt.Client(client_id = mqtt_client_id)
+    # Set Certificate if not none
+    if(mqtt_certificate is not None):
+        mqtt.tls_set(mqtt_certificate, tls_version=ssl.PROTOCOL_TLSv1_2)
+        client.tls_insecure_set(True)
     # Register callback handlers, enable logging and set the reconnect delay,
     # authentication parameters and last will.
     mqttc.on_connect = mqtt_on_connect
