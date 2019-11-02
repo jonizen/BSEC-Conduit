@@ -38,7 +38,7 @@ and user you want, just make sure they are a member of the `i2c` group.
 - `source bin/activate` Activate our new venv.
 - `sudo -u pi pip3 install systemd-python paho-mqtt` Install required Python modules.
 - `sudo python3 install.py` Run the installer.
-- `sudo -u pi nano bsec-conduit.ini` Edit the config section at the top of the file. Use `CTRL-X` to save.(Mqtt settings is not working, just cayennes set info in the bsec-conduit file.)
+- `sudo -u pi nano bsec-conduit.ini` Edit the config section at the top of the file. Use CTRL-X to save.
 - `sudo systemctl start bsec-conduit.service; journalctl -f -u bsec-conduit.service` Start the program and open the log file.
 
 ## Usage
